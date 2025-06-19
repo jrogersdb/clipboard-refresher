@@ -76,14 +76,33 @@ class ClipboardMonitor:
 
     def _monitor_clipboard(self):
         """Monitor clipboard for changes in a loop."""
-        last_sequence = -1
+        self.logger.info("Clipboard monitor started")
+        last_sequence = 0
+        consecutive_errors = 0
+        max_consecutive_errors = 5
         
         while self.running:
             try:
-                # Get the current clipboard sequence number
-                win32clipboard.OpenClipboard()
-                current_sequence = win32clipboard.GetClipboardSequenceNumber()
-                win32clipboard.CloseClipboard()
+                # Get the current clipboard sequence number with retry logic
+                current_sequence = None
+                for attempt in range(3):  # Try up to 3 times
+                    try:
+                        win32clipboard.OpenClipboard()
+                        current_sequence = win32clipboard.GetClipboardSequenceNumber()
+                        win32clipboard.CloseClipboard()
+                        consecutive_errors = 0  # Reset on successful operation
+                        break
+                    except pywintypes.error as e:
+                        if e.winerror == 5:  # Access Denied
+                            self.logger.debug("Clipboard is busy, waiting...")
+                            time.sleep(0.1 * (attempt + 1))  # Exponential backoff
+                            if attempt == 2:  # Last attempt
+                                raise
+                        else:
+                            raise
+                
+                if current_sequence is None:
+                    continue  # Skip this iteration if we couldn't get the sequence
                 
                 # Check if clipboard content has changed
                 if current_sequence != last_sequence and self.enabled:
@@ -95,7 +114,7 @@ class ClipboardMonitor:
                         process_name = self._get_foreground_window_process()
                         
                         if process_name and process_name.lower() in RDP_PROCESSES:
-                            self.logger.info(f"Clipboard updated by RDP process: {process_name}")
+                            self.logger.debug(f"Clipboard updated by RDP process: {process_name}")
                             self.last_clipboard_content = content
                             
                             if self.on_rdp_clipboard_update:
@@ -112,16 +131,28 @@ class ClipboardMonitor:
                 # Small delay to prevent high CPU usage
                 time.sleep(0.1)
                 
-            except Exception as e:
-                self.logger.error(f"Error in clipboard monitoring loop: {e}")
-                time.sleep(1)  # Wait a bit before retrying after an error
+            except pywintypes.error as e:
+                consecutive_errors += 1
+                if e.winerror == 5:  # Access Denied
+                    if consecutive_errors % 10 == 0:  # Log every 10th error to avoid log spam
+                        self.logger.debug("Clipboard is busy (access denied), will retry...")
+                else:
+                    self.logger.error(f"Windows error in clipboard monitor: {e}")
                 
-                # Small sleep to prevent high CPU usage
-                time.sleep(0.1)
-                
+                if consecutive_errors > max_consecutive_errors:
+                    self.logger.warning("Too many consecutive errors, pausing monitor...")
+                    time.sleep(5)  # Longer pause if we're having persistent issues
+                else:
+                    time.sleep(0.5)  # Shorter pause for transient errors
+                    
             except Exception as e:
-                self.logger.error(f"Error in clipboard monitor: {e}")
+                consecutive_errors += 1
+                self.logger.error(f"Unexpected error in clipboard monitor: {e}")
                 time.sleep(1)  # Prevent tight loop on error
+                
+                if consecutive_errors > max_consecutive_errors:
+                    self.logger.warning("Too many consecutive errors, pausing monitor...")
+                    time.sleep(5)  # Longer pause if we're having persistent issues
 
     def start(self):
         """Start the clipboard monitoring thread."""

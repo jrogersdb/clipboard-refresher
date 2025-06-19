@@ -11,9 +11,16 @@ from .tray_icon import TrayIcon
 def setup_logging():
     """Configure logging to both file and console."""
     try:
-        log_dir = os.path.join(os.path.expanduser('~'), '.clipboard_refresher')
-        os.makedirs(log_dir, exist_ok=True)
+        # Get the directory where the executable or script is located
+        if getattr(sys, 'frozen', False):
+            # Running as compiled executable
+            log_dir = os.path.dirname(sys.executable)
+        else:
+            # Running as script
+            log_dir = os.path.dirname(os.path.abspath(__file__))
+            
         log_file = os.path.join(log_dir, 'clipboard_refresher.log')
+        os.makedirs(log_dir, exist_ok=True)
         
         # Create a console handler
         console_handler = logging.StreamHandler(sys.stdout)
