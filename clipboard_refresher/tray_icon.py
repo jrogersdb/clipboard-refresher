@@ -246,19 +246,40 @@ class TrayIcon:
 
     def stop(self):
         """Stop the system tray icon and clean up resources."""
-        # Stop the system tray icon
-        if self.icon is not None:
-            self.icon.stop()
-            self.icon = None
+        self.log("Stopping tray icon...")
+        
+        try:
+            # Clean up Tkinter windows first
+            if hasattr(self, '_log_window') and hasattr(self._log_window, 'winfo_exists') and self._log_window.winfo_exists():
+                try:
+                    self._log_window.destroy()
+                except Exception as e:
+                    self.logger.error(f"Error destroying log window: {e}")
             
-        # Clean up Tkinter windows
-        if hasattr(self, '_log_window') and self._log_window.winfo_exists():
-            self._log_window.destroy()
+            # Clean up the root window if it exists
+            if hasattr(self, '_root') and self._root:
+                try:
+                    self._root.quit()
+                    self._root.destroy()
+                except Exception as e:
+                    self.logger.error(f"Error cleaning up Tkinter root: {e}")
             
-        # Clean up the root window if it exists
-        if hasattr(self, '_root') and self._root:
-            try:
-                self._root.quit()
-                self._root.destroy()
-            except Exception as e:
-                self.logger.error(f"Error cleaning up Tkinter: {e}")
+            # Stop the icon last
+            if self.icon is not None:
+                try:
+                    self.icon.stop()
+                except Exception as e:
+                    self.logger.error(f"Error stopping system tray icon: {e}")
+                finally:
+                    self.icon = None
+                    
+            self.log("Tray icon stopped")
+            
+        except Exception as e:
+            self.logger.error(f"Error during tray icon shutdown: {e}")
+        finally:
+            # Ensure we clear any remaining references
+            if hasattr(self, '_root'):
+                del self._root
+            if hasattr(self, '_log_window'):
+                del self._log_window

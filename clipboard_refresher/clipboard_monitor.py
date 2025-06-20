@@ -3,6 +3,7 @@ import win32process
 import win32gui
 import win32con
 import win32api  # Added missing import
+import pywintypes  # For Windows-specific exceptions
 import logging
 import time
 from typing import Optional, Callable, Any

@@ -98,27 +98,30 @@ class ClipboardRefresher:
 
     def on_quit(self):
         """Handle application quit."""
-        self.logger.info("Shutting down...")
+        self.logger.info("Shutdown requested by user")
         self.running = False
         
         try:
             # Stop the clipboard monitor
             if self.clipboard_monitor:
+                self.logger.debug("Stopping clipboard monitor...")
                 self.clipboard_monitor.stop()
                 self.clipboard_monitor = None
             
             # Stop the tray icon
             if self.tray_icon:
+                self.logger.debug("Stopping tray icon...")
                 self.tray_icon.stop()
                 self.tray_icon = None
-            
-            self.logger.info("Application stopped")
+                
+            self.logger.info("Shutdown complete")
             
         except Exception as e:
             self.logger.error(f"Error during shutdown: {e}")
-            
-        # Use os._exit() instead of sys.exit() to avoid the SystemExit exception
-        os._exit(0)
+        finally:
+            # Force exit to ensure all threads are terminated
+            import os
+            os._exit(0)
 
     def run(self):
         """Run the application."""
